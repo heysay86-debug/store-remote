@@ -351,8 +351,10 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   }
 
   var volTouched = 0;
+  var lastStatus = null;
   function render(st) {
     if (!st) return;
+    lastStatus = st;
     var conn = $("conn");
     if (st.online) {
       conn.dataset.state = "on";
@@ -433,7 +435,10 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
     if (value != null) body.p_value = value;
     toast(LABELS[action] + " 보내는 중…");
     return rpc("send_command", body).then(function () {
-      toast(LABELS[action] + (value != null ? " " + value + "%" : "") + " 명령을 보냈습니다. 공기계가 2초 안에 받습니다.");
+      // 공기계가 방금 응답했으면 빠른 확인 중, 아니면 평소 30초 간격에서 깨어나는 중
+      var quick = lastStatus && lastStatus.age_seconds != null && lastStatus.age_seconds <= 5;
+      toast(LABELS[action] + (value != null ? " " + value + "%" : "") + " 명령을 보냈습니다. " +
+        (quick ? "공기계가 2초 안에 받습니다." : "공기계가 최대 30초 안에 받습니다."));
       setTimeout(refresh, 2500);
     }).catch(function (e) {
       if (e.badSecret) { forgetSecret(); showGate("비밀번호가 맞지 않습니다. 다시 입력해 주세요."); return; }

@@ -28,7 +28,11 @@ import java.util.Locale
 class SyncService : Service() {
     companion object {
         private const val CHANNEL = "sync"
-        private const val INTERVAL_MS = 2000L
+        // 아이폰 리모컨 페이지를 보고 있을 때는 2초, 평소에는 30초 간격
+        private const val FAST_MS = 2000L
+        private const val IDLE_MS = 30000L
+        // 연결 오류 때는 10초 뒤 재시도
+        private const val RETRY_MS = 10000L
 
         @Volatile var running = false
         @Volatile var lastResult: String = "아직 연결 전"
@@ -51,12 +55,13 @@ class SyncService : Service() {
 
     private val loop = object : Runnable {
         override fun run() {
-            try {
-                tick()
+            val next = try {
+                if (tick()) FAST_MS else IDLE_MS
             } catch (e: Exception) {
                 lastResult = "연결 오류: ${e.message}"
+                RETRY_MS
             }
-            if (running) handler.postDelayed(this, INTERVAL_MS)
+            if (running) handler.postDelayed(this, next)
         }
     }
 
@@ -112,10 +117,11 @@ class SyncService : Service() {
         }
     }
 
-    private fun tick() {
+    /** 서버와 한 번 주고받는다. 아이폰 페이지가 열려 있으면 true(빠른 간격) */
+    private fun tick(): Boolean {
         if (!Prefs.isConfigured(this)) {
             lastResult = "연결 정보 없음"
-            return
+            return false
         }
         val c = player.controller()
         // 음악 앱을 고르지 않았으면 처음 재생된 앱을 자동으로 지정
@@ -135,12 +141,16 @@ class SyncService : Service() {
         body.put("p_output", player.outputName())
         body.put("p_audio_active", player.audioActive())
 
-        val commands = JSONArray(Api.rpc(this, "device_sync", body))
+        val res = JSONObject(Api.rpc(this, "device_sync2", body))
+        val commands = res.optJSONArray("commands") ?: JSONArray()
         for (i in 0 until commands.length()) {
             val o = commands.getJSONObject(i)
             execute(o.getString("action"), if (o.isNull("value")) null else o.getInt("value"))
         }
-        lastResult = "정상 연결 " + SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date())
+        val fast = res.optBoolean("fast", false) || commands.length() > 0
+        lastResult = "정상 연결 " + SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date()) +
+            if (fast) " · 빠른 확인" else " · 30초 간격"
+        return fast
     }
 
     private fun execute(action: String, value: Int?) {
