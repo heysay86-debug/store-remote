@@ -153,6 +153,8 @@ details[open] summary { margin-bottom: 10px; }
   appearance: none; border: 0; border-radius: 10px; padding: 11px 14px;
   background: var(--fg); color: var(--bg); font: 600 14px/1 var(--font-ui); cursor: pointer;
 }
+a { color: var(--amber-ink); }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--key-edge); }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .link-box { font: 500 12px/1.4 var(--font-num); background: var(--key); border: 1px solid var(--key-edge); border-radius: 10px; padding: 10px; word-break: break-all; color: var(--fg); user-select: all; }
@@ -177,6 +179,7 @@ details[open] summary { margin-bottom: 10px; }
     </div>
     <button class="btn" id="secret-save" type="button">저장</button>
     <div class="toast" id="gate-msg"></div>
+    <p>공기계에 앱을 설치할 때는 <a href="https://github.com/heysay86-debug/store-remote/releases/latest/download/store-remote.apk">공기계 앱 내려받기</a>를 누르세요.</p>
   </section>
 
   <main id="app" class="stack" hidden>
@@ -237,6 +240,9 @@ details[open] summary { margin-bottom: 10px; }
     <details>
       <summary>공기계 연결 · 설정</summary>
       <div class="setup">
+        <div class="btn-row">
+          <a class="btn ghost" href="https://github.com/heysay86-debug/store-remote/releases/latest/download/store-remote.apk">공기계 앱 내려받기</a>
+        </div>
         <p>공기계에서 이 페이지를 열고 아래 버튼을 누르면 매장 리모컨 앱에 연결 정보가 들어갑니다. 버튼이 안 되면 링크를 복사해서 앱의 "연결 정보 붙여넣기"를 누르세요.</p>
         <div class="btn-row">
           <a class="btn" id="setup-open" href="#">공기계 앱에 연결</a>
