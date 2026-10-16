@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>매장 리모컨</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="매장 리모컨">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 위는 앰프 표시창처럼 지금 상태, 아래는 리모컨 키 */
+:root {
+  --bg: #e9e6e1;
+  --panel: #f6f4f0;
+  --key: #fbfaf7;
+  --key-edge: #d3cec6;
+  --fg: #26231f;
+  --muted: #6f6a62;
+  --lcd: #2a2622;
+  --lcd-fg: #f3e7d3;
+  --lcd-dim: #a8998a;
+  --amber: #e2901f;
+  --amber-ink: #8a4f00;
+  --ok: #2f8a4c;
+  --off: #b0473b;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171513; --panel: #211e1b; --key: #2b2723; --key-edge: #3b3631;
+    --fg: #efe9e0; --muted: #a39b90; --lcd: #0e0d0c; --lcd-fg: #f3e7d3; --lcd-dim: #8f8274;
+    --amber: #f0a43c; --amber-ink: #f6c27a; --ok: #5cc27c; --off: #e2766a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171513; --panel: #211e1b; --key: #2b2723; --key-edge: #3b3631;
+  --fg: #efe9e0; --muted: #a39b90; --lcd: #0e0d0c; --lcd-fg: #f3e7d3; --lcd-dim: #8f8274;
+  --amber: #f0a43c; --amber-ink: #f6c27a; --ok: #5cc27c; --off: #e2766a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.stack { display: grid; gap: 18px; min-width: 0; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap {
+  max-width: 440px;
+  margin: 0 auto;
+  padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 18px;
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.conn[data-state="on"] .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.conn[data-state="off"] .dot { background: var(--off); }
+
+/* 표시창 */
+.lcd {
+  background: var(--lcd);
+  color: var(--lcd-fg);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.lcd-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.state {
+  font: 600 12px/1 var(--font-num);
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  text-transform: uppercase;
+}
+.app { font-size: 12px; color: var(--lcd-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.track { min-width: 0; }
+.title { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artist { font-size: 14px; color: var(--lcd-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meters { display: flex; gap: 18px; font: 500 12px/1 var(--font-num); color: var(--lcd-dim); font-variant-numeric: tabular-nums; }
+.meters b { color: var(--lcd-fg); font-weight: 600; }
+
+/* 키 */
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.key {
+  appearance: none;
+  border: 1px solid var(--key-edge);
+  background: var(--key);
+  color: var(--fg);
+  border-radius: 14px;
+  min-height: 64px;
+  padding: 10px 4px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  font: 600 13px/1.2 var(--font-ui);
+  box-shadow: 0 2px 0 var(--key-edge);
+  cursor: pointer;
+  transition: transform 0.06s, box-shadow 0.06s;
+}
+.key svg { width: 22px; height: 22px; fill: currentColor; }
+.key:active { transform: translateY(2px); box-shadow: 0 0 0 var(--key-edge); }
+.key:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.key.main { background: var(--amber); border-color: var(--amber); color: #1d1405; box-shadow: 0 2px 0 color-mix(in srgb, var(--amber) 60%, #000); }
+.key.wide { grid-column: span 2; }
+
+.panel { background: var(--panel); border: 1px solid var(--key-edge); border-radius: 14px; padding: 14px 16px; display: grid; gap: 12px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+.vol-row { display: flex; align-items: center; gap: 12px; }
+.vol-row input { flex: 1; min-width: 0; accent-color: var(--amber); }
+.vol-num { font: 600 15px/1 var(--font-num); font-variant-numeric: tabular-nums; min-width: 3.2em; text-align: right; }
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.chip {
+  appearance: none; border: 1px solid var(--key-edge); background: var(--key); color: var(--fg);
+  border-radius: 10px; padding: 9px 0; font: 600 13px/1 var(--font-ui); cursor: pointer;
+}
+.chip:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.toast { min-height: 1.4em; font-size: 13px; color: var(--muted); text-align: center; }
+.toast.err { color: var(--off); }
+
+details { background: var(--panel); border: 1px solid var(--key-edge); border-radius: 14px; padding: 12px 16px; }
+summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+details[open] summary { margin-bottom: 10px; }
+.setup { display: grid; gap: 10px; font-size: 14px; color: var(--muted); }
+.setup p { margin: 0; }
+.field { display: grid; gap: 6px; }
+.field input {
+  font: 500 15px var(--font-num); padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--key-edge); background: var(--key); color: var(--fg); width: 100%;
+}
+.btn {
+  appearance: none; border: 0; border-radius: 10px; padding: 11px 14px;
+  background: var(--fg); color: var(--bg); font: 600 14px/1 var(--font-ui); cursor: pointer;
+}
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--key-edge); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.link-box { font: 500 12px/1.4 var(--font-num); background: var(--key); border: 1px solid var(--key-edge); border-radius: 10px; padding: 10px; word-break: break-all; color: var(--fg); user-select: all; }
+
+/* 비밀번호 입력 화면 */
+.gate { display: grid; gap: 14px; padding-top: 12vh; }
+.gate h1 { font-size: 22px; }
+.gate p { margin: 0; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { .key { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="gate" id="gate" hidden>
+    <h1>매장 리모컨</h1>
+    <p>처음 한 번만 리모컨 비밀번호를 입력해 주세요. 이 기기에 저장됩니다.</p>
+    <div class="field">
+      <label for="secret-input" class="label">비밀번호</label>
+      <input id="secret-input" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+    </div>
+    <button class="btn" id="secret-save" type="button">저장</button>
+    <div class="toast" id="gate-msg"></div>
+  </section>
+
+  <main id="app" class="stack" hidden>
+    <header>
+      <h1>매장 리모컨</h1>
+      <span class="conn" id="conn" data-state="wait"><span class="dot"></span><span id="conn-text">확인 중</span></span>
+    </header>
+
+    <section class="lcd" aria-live="polite">
+      <div class="lcd-top">
+        <span class="state" id="state">STOP</span>
+        <span class="app" id="app-name">-</span>
+      </div>
+      <div class="track">
+        <div class="title" id="title">재생 정보 없음</div>
+        <div class="artist" id="artist">&nbsp;</div>
+      </div>
+      <div class="meters">
+        <span>VOL <b id="m-vol">--</b>%</span>
+        <span>BAT <b id="m-bat">--</b>%<span id="m-chg"></span></span>
+        <span id="m-seen"></span>
+      </div>
+    </section>
+
+    <section class="keys" aria-label="재생 제어">
+      <button class="key" type="button" data-cmd="prev" aria-label="이전 곡">
+        <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>이전
+      </button>
+      <button class="key main wide" type="button" data-cmd="play" aria-label="재생">
+        <svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg>재생
+      </button>
+      <button class="key" type="button" data-cmd="next" aria-label="다음 곡">
+        <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg>다음
+      </button>
+      <button class="key wide" type="button" data-cmd="pause" aria-label="정지">
+        <svg viewBox="0 0 24 24"><path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z"/></svg>정지
+      </button>
+      <button class="key wide" type="button" data-cmd="launch" aria-label="음악 앱 열기">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm-1 3v5.3A2.5 2.5 0 1 0 13 16V10h3V8z"/></svg>음악 앱 열기
+      </button>
+    </section>
+
+    <section class="panel" aria-label="볼륨">
+      <div class="label">볼륨</div>
+      <div class="vol-row">
+        <input type="range" id="vol" min="0" max="100" step="5" value="50" aria-label="볼륨">
+        <span class="vol-num" id="vol-num">50%</span>
+      </div>
+      <div class="presets">
+        <button class="chip" type="button" data-vol="30">작게 30</button>
+        <button class="chip" type="button" data-vol="50">보통 50</button>
+        <button class="chip" type="button" data-vol="70">크게 70</button>
+      </div>
+    </section>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <details>
+      <summary>공기계 연결 · 설정</summary>
+      <div class="setup">
+        <p>공기계에서 이 페이지를 열고 아래 버튼을 누르면 매장 리모컨 앱에 연결 정보가 들어갑니다. 버튼이 안 되면 링크를 복사해서 앱의 "연결 정보 붙여넣기"를 누르세요.</p>
+        <div class="btn-row">
+          <a class="btn" id="setup-open" href="#">공기계 앱에 연결</a>
+          <button class="btn ghost" type="button" id="setup-copy">링크 복사</button>
+        </div>
+        <div class="link-box" id="setup-link"></div>
+        <div class="btn-row">
+          <button class="btn ghost" type="button" id="secret-reset">비밀번호 다시 입력</button>
+        </div>
+      </div>
+    </details>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var SUPABASE_URL = "https://hgozqzycgstykhjyxmin.supabase.co";
+  var ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhnb3pxenljZ3N0eWtoanl4bWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjkwODgsImV4cCI6MjEwNzc0NTA4OH0.nt8M7VHTbGjBJX_rPnntTzx82bm79cn52TyDdLiAyjs";
+  var STORE_KEY = "storeremote.secret";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var secret = null;
+  try { secret = localStorage.getItem(STORE_KEY); } catch (e) {}
+  var pollTimer = null;
+
+  function rpc(fn, body) {
+    return fetch(SUPABASE_URL + "/rest/v1/rpc/" + fn, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": ANON_KEY,
+        "Authorization": "Bearer " + ANON_KEY
+      },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var data = null;
+        try { data = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok) {
+          var msg = (data && data.message) || ("HTTP " + r.status);
+          var err = new Error(msg);
+          err.badSecret = /invalid secret/.test(msg);
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function toast(text, isErr) {
+    var t = $("toast");
+    t.textContent = text;
+    t.className = "toast" + (isErr ? " err" : "");
+  }
+
+  function showGate(msg) {
+    $("app").hidden = true;
+    $("gate").hidden = false;
+    $("gate-msg").textContent = msg || "";
+    stopPolling();
+  }
+
+  function showApp() {
+    $("gate").hidden = true;
+    $("app").hidden = false;
+    var link = "storeremote://setup?u=" + encodeURIComponent(SUPABASE_URL) +
+      "&k=" + encodeURIComponent(ANON_KEY) + "&s=" + encodeURIComponent(secret);
+    $("setup-link").textContent = link;
+    $("setup-open").setAttribute("href", link);
+    startPolling();
+  }
+
+  function ago(iso) {
+    if (!iso) return "";
+    var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (s < 60) return s + "초 전";
+    if (s < 3600) return Math.round(s / 60) + "분 전";
+    if (s < 86400) return Math.round(s / 3600) + "시간 전";
+    return Math.round(s / 86400) + "일 전";
+  }
+
+  var volTouched = 0;
+  function render(st) {
+    if (!st) return;
+    var conn = $("conn");
+    if (st.online) {
+      conn.dataset.state = "on";
+      $("conn-text").textContent = "공기계 연결됨";
+    } else {
+      conn.dataset.state = "off";
+      $("conn-text").textContent = st.updated_at ? "공기계 응답 없음 · " + ago(st.updated_at) : "공기계 연결 전";
+    }
+    $("state").textContent = st.playing ? "PLAYING" : "STOP";
+    $("app-name").textContent = st.app || "-";
+    $("title").textContent = st.title || "재생 정보 없음";
+    $("artist").textContent = st.artist || " ";
+    $("m-vol").textContent = st.volume == null ? "--" : st.volume;
+    $("m-bat").textContent = st.battery == null ? "--" : st.battery;
+    $("m-chg").textContent = st.charging ? " 충전중" : "";
+    $("m-seen").textContent = st.pending > 0 ? "대기 " + st.pending : "";
+    if (st.volume != null && Date.now() - volTouched > 6000) {
+      $("vol").value = st.volume;
+      $("vol-num").textContent = st.volume + "%";
+    }
+  }
+
+  function refresh() {
+    if (!secret) return;
+    rpc("get_status", { p_secret: secret }).then(render).catch(function (e) {
+      if (e.badSecret) { forgetSecret(); showGate("비밀번호가 맞지 않습니다. 다시 입력해 주세요."); }
+      else { $("conn").dataset.state = "off"; $("conn-text").textContent = "서버 연결 안 됨"; }
+    });
+  }
+
+  function startPolling() {
+    stopPolling();
+    refresh();
+    pollTimer = setInterval(function () { if (!document.hidden) refresh(); }, 3000);
+  }
+  function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && secret) refresh(); });
+
+  var LABELS = { play: "재생", pause: "정지", next: "다음 곡", prev: "이전 곡", launch: "음악 앱 열기", volume: "볼륨" };
+  function send(action, value) {
+    var body = { p_secret: secret, p_action: action };
+    if (value != null) body.p_value = value;
+    toast(LABELS[action] + " 보내는 중…");
+    return rpc("send_command", body).then(function () {
+      toast(LABELS[action] + (value != null ? " " + value + "%" : "") + " 명령을 보냈습니다. 공기계가 2초 안에 받습니다.");
+      setTimeout(refresh, 2500);
+    }).catch(function (e) {
+      if (e.badSecret) { forgetSecret(); showGate("비밀번호가 맞지 않습니다. 다시 입력해 주세요."); return; }
+      toast("보내지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.", true);
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-cmd]"), function (b) {
+    b.addEventListener("click", function () { send(b.getAttribute("data-cmd")); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-vol]"), function (b) {
+    b.addEventListener("click", function () {
+      var v = parseInt(b.getAttribute("data-vol"), 10);
+      volTouched = Date.now();
+      $("vol").value = v; $("vol-num").textContent = v + "%";
+      send("volume", v);
+    });
+  });
+  $("vol").addEventListener("input", function () {
+    volTouched = Date.now();
+    $("vol-num").textContent = this.value + "%";
+  });
+  $("vol").addEventListener("change", function () {
+    volTouched = Date.now();
+    send("volume", parseInt(this.value, 10));
+  });
+
+  function forgetSecret() {
+    secret = null;
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+  }
+
+  $("secret-save").addEventListener("click", function () {
+    var v = $("secret-input").value.trim();
+    if (!v) { $("gate-msg").textContent = "비밀번호를 입력해 주세요."; return; }
+    $("gate-msg").textContent = "확인 중…";
+    rpc("get_status", { p_secret: v }).then(function (st) {
+      secret = v;
+      try { localStorage.setItem(STORE_KEY, v); } catch (e) {}
+      showApp();
+      render(st);
+    }).catch(function (e) {
+      $("gate-msg").textContent = e.badSecret ? "비밀번호가 맞지 않습니다." : "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    });
+  });
+  $("secret-input").addEventListener("keydown", function (e) { if (e.key === "Enter") $("secret-save").click(); });
+
+  $("secret-reset").addEventListener("click", function () { forgetSecret(); showGate(); });
+  $("setup-copy").addEventListener("click", function () {
+    var text = $("setup-link").textContent;
+    var done = function () { toast("연결 링크를 복사했습니다."); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { selectLink(); });
+    } else { selectLink(); }
+  });
+  function selectLink() {
+    var r = document.createRange(); r.selectNodeContents($("setup-link"));
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    toast("링크를 선택했습니다. 복사를 눌러 주세요.");
+  }
+
+  if (secret) showApp(); else showGate();
+})();
+</script>
+</body>
+</html>
