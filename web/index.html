@@ -76,6 +76,23 @@ h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
 .conn[data-state="on"] .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
 .conn[data-state="off"] .dot { background: var(--off); }
 
+/* 매장 소리 상태 */
+.banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border-radius: 14px;
+  border: 1px solid var(--key-edge); background: var(--panel);
+}
+.banner-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); }
+.banner-text { min-width: 0; }
+.banner-main { font-size: 16px; font-weight: 700; }
+.banner-sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.banner[data-level="good"] { border-color: color-mix(in srgb, var(--ok) 45%, var(--key-edge)); background: color-mix(in srgb, var(--ok) 10%, var(--panel)); }
+.banner[data-level="good"] .banner-dot { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+.banner[data-level="warn"] { border-color: color-mix(in srgb, var(--amber) 55%, var(--key-edge)); background: color-mix(in srgb, var(--amber) 12%, var(--panel)); }
+.banner[data-level="warn"] .banner-dot { background: var(--amber); }
+.banner[data-level="off"] { border-color: color-mix(in srgb, var(--off) 45%, var(--key-edge)); background: color-mix(in srgb, var(--off) 10%, var(--panel)); }
+.banner[data-level="off"] .banner-dot { background: var(--off); }
+
 /* 표시창 */
 .lcd {
   background: var(--lcd);
@@ -188,7 +205,15 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       <span class="conn" id="conn" data-state="wait"><span class="dot"></span><span id="conn-text">확인 중</span></span>
     </header>
 
-    <section class="lcd" aria-live="polite">
+    <section class="banner" id="banner" data-level="idle" aria-live="polite">
+      <span class="banner-dot" aria-hidden="true"></span>
+      <div class="banner-text">
+        <div class="banner-main" id="banner-main">상태 확인 중</div>
+        <div class="banner-sub" id="banner-sub">&nbsp;</div>
+      </div>
+    </section>
+
+    <section class="lcd">
       <div class="lcd-top">
         <span class="state" id="state">STOP</span>
         <span class="app" id="app-name">-</span>
@@ -336,6 +361,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       conn.dataset.state = "off";
       $("conn-text").textContent = st.updated_at ? "공기계 응답 없음 · " + ago(st.updated_at) : "공기계 연결 전";
     }
+    renderBanner(st);
     $("state").textContent = st.playing ? "PLAYING" : "STOP";
     $("app-name").textContent = st.app || "-";
     $("title").textContent = st.title || "재생 정보 없음";
@@ -350,11 +376,46 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
     }
   }
 
+  function setBanner(level, main, sub) {
+    $("banner").dataset.level = level;
+    $("banner-main").textContent = main;
+    $("banner-sub").textContent = sub || " ";
+  }
+
+  // 매장에서 실제로 소리가 나오는지 판단
+  function renderBanner(st) {
+    if (!st.online) {
+      setBanner("off", "매장 상태를 알 수 없음", st.updated_at ? "공기계 마지막 응답 " + ago(st.updated_at) : "공기계가 아직 연결되지 않았습니다");
+      return;
+    }
+    var known = st.audio_active !== null && st.audio_active !== undefined;
+    var sounding = known ? st.audio_active : st.playing;
+    var phone = st.output === "휴대폰 스피커";
+    if (sounding) {
+      if (st.volume === 0) {
+        setBanner("warn", "재생 중이지만 볼륨이 0입니다", "볼륨을 올려 주세요");
+      } else if (phone) {
+        setBanner("warn", "휴대폰 스피커로 나오는 중", "JBL 블루투스 연결이 끊긴 것 같습니다");
+      } else {
+        setBanner("good", "매장에서 재생 중", (st.output || "스피커") + (st.volume != null ? " · 볼륨 " + st.volume + "%" : ""));
+      }
+      return;
+    }
+    if (st.playing && known) {
+      setBanner("warn", "재생 상태지만 소리가 나가지 않음", "음악 앱이 멈췄을 수 있습니다. 재생을 다시 눌러 보세요");
+      return;
+    }
+    setBanner("idle", "음악 꺼짐", st.output ? "연결된 출력: " + st.output : "");
+  }
+
   function refresh() {
     if (!secret) return;
     rpc("get_status", { p_secret: secret }).then(render).catch(function (e) {
       if (e.badSecret) { forgetSecret(); showGate("비밀번호가 맞지 않습니다. 다시 입력해 주세요."); }
-      else { $("conn").dataset.state = "off"; $("conn-text").textContent = "서버 연결 안 됨"; }
+      else {
+        $("conn").dataset.state = "off"; $("conn-text").textContent = "서버 연결 안 됨";
+        setBanner("off", "상태를 불러오지 못함", "이 폰의 인터넷 연결을 확인해 주세요");
+      }
     });
   }
 

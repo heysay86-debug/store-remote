@@ -2,6 +2,7 @@ package net.betterdan.storeremote
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -107,6 +108,23 @@ class Player(private val ctx: Context) {
     fun prev() {
         val c = controller()
         if (c != null) c.transportControls.skipToPrevious() else key(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+    }
+
+    /** 공기계에서 실제로 소리가 나가고 있는지 (음악 앱 상태와 별개로 오디오 출력 기준) */
+    fun audioActive(): Boolean = am.isMusicActive
+
+    /** 소리가 나가는 스피커 이름. 블루투스 스피커가 연결돼 있으면 그 이름, 없으면 휴대폰 스피커 */
+    fun outputName(): String {
+        val bluetooth = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == 26 || // TYPE_BLE_HEADSET
+                it.type == 27    // TYPE_BLE_SPEAKER
+        }
+        if (bluetooth != null) {
+            val name = bluetooth.productName?.toString()?.trim()
+            return if (name.isNullOrEmpty()) "블루투스 스피커" else name
+        }
+        return "휴대폰 스피커"
     }
 
     fun volumePct(): Int {

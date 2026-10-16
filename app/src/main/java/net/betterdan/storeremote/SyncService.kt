@@ -132,6 +132,8 @@ class SyncService : Service() {
         body.put("p_volume", player.volumePct())
         body.put("p_battery", bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
         body.put("p_charging", bm.isCharging)
+        body.put("p_output", player.outputName())
+        body.put("p_audio_active", player.audioActive())
 
         val commands = JSONArray(Api.rpc(this, "device_sync", body))
         for (i in 0 until commands.length()) {
