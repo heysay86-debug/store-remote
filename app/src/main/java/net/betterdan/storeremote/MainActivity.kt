@@ -137,13 +137,18 @@ class MainActivity : Activity() {
     }
 
     private fun chooseMusicApp() {
+        val player = Player(this)
+        // 지금 재생 세션이 있는 앱을 맨 위에
+        val playing = player.sessionPackages()
+            .map { it to "▶ " + (player.appLabel(it) ?: it) }
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
-        val apps = packageManager.queryIntentActivities(launcher, 0)
+        val installed = packageManager.queryIntentActivities(launcher, 0)
             .map { it.activityInfo.packageName to it.loadLabel(packageManager).toString() }
+            .sortedBy { it.second }
+        val apps = (playing + installed)
             .filter { it.first != packageName }
             .distinctBy { it.first }
-            .sortedBy { it.second }
         AlertDialog.Builder(this)
             .setTitle("매장에서 틀 음악 앱")
             .setItems(apps.map { it.second }.toTypedArray()) { _, which ->

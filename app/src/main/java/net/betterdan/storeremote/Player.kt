@@ -27,6 +27,16 @@ class Player(private val ctx: Context) {
         }
     }
 
+    /** 지금 재생 세션을 가진 앱 패키지 목록 */
+    fun sessionPackages(): List<String> {
+        if (!MediaListener.isEnabled(ctx)) return emptyList()
+        return try {
+            msm.getActiveSessions(MediaListener.component(ctx)).map { it.packageName }.distinct()
+        } catch (e: SecurityException) {
+            emptyList()
+        }
+    }
+
     fun isPlaying(c: MediaController?): Boolean = c?.playbackState?.state == PlaybackState.STATE_PLAYING
 
     fun title(c: MediaController?): String? = c?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)

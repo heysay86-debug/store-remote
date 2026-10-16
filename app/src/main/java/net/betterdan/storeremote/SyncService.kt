@@ -118,6 +118,10 @@ class SyncService : Service() {
             return
         }
         val c = player.controller()
+        // 음악 앱을 고르지 않았으면 처음 재생된 앱을 자동으로 지정
+        if (Prefs.musicPkg(this) == null && c != null && c.packageName != packageName) {
+            Prefs.setMusicPkg(this, c.packageName)
+        }
         val bm = getSystemService(BatteryManager::class.java)
         val body = JSONObject()
         body.put("p_secret", Prefs.secret(this))
