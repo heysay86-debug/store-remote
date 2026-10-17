@@ -421,13 +421,43 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
     });
   }
 
+  // 확인 간격: 마지막으로 화면을 만진 뒤 1분까지 3초, 5분까지 15초, 그 뒤에는 멈춤
+  var lastActive = Date.now();
+  var paused = false;
+  function nextDelay() {
+    var idle = Date.now() - lastActive;
+    if (idle < 60 * 1000) return 3000;
+    if (idle < 5 * 60 * 1000) return 15000;
+    return 0;
+  }
+  function loop() {
+    pollTimer = null;
+    if (!secret || document.hidden) return;
+    var d = nextDelay();
+    if (!d) {
+      paused = true;
+      $("conn").dataset.state = "wait";
+      $("conn-text").textContent = "자동 확인 멈춤 · 화면을 누르면 다시 확인";
+      return;
+    }
+    refresh();
+    pollTimer = setTimeout(loop, d);
+  }
   function startPolling() {
     stopPolling();
-    refresh();
-    pollTimer = setInterval(function () { if (!document.hidden) refresh(); }, 3000);
+    paused = false;
+    lastActive = Date.now();
+    loop();
   }
-  function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && secret) refresh(); });
+  function stopPolling() { if (pollTimer) clearTimeout(pollTimer); pollTimer = null; }
+  function poke() {
+    lastActive = Date.now();
+    if (secret && (paused || !pollTimer) && !document.hidden) startPolling();
+  }
+  document.addEventListener("pointerdown", poke, { passive: true });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopPolling(); else poke();
+  });
 
   var LABELS = { play: "재생", pause: "정지", next: "다음 곡", prev: "이전 곡", launch: "음악 앱 열기", volume: "볼륨" };
   function send(action, value) {
