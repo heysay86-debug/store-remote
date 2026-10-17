@@ -1,5 +1,6 @@
 package net.betterdan.storeremote
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,13 +10,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
-import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -23,19 +24,23 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 2초마다 서버에 공기계 상태를 보고하고, 쌓여 있는 명령을 받아 실행하는 상시 서비스.
+ * 서버에 공기계 상태를 보고하고, 쌓여 있는 명령을 받아 실행하는 상시 서비스.
+ *
+ * 평소: 공기계를 잠들게 두고, 30초마다 알람으로 잠깐 깨워 한 번 확인한 뒤 다시 재운다.
+ * 아이폰 리모컨 페이지를 보고 있을 때: 깨어 있는 상태로 2초마다 확인한다.
  */
 class SyncService : Service() {
     companion object {
         private const val CHANNEL = "sync"
-        // 아이폰 리모컨 페이지를 보고 있을 때는 2초, 평소에는 30초 간격
         private const val FAST_MS = 2000L
         private const val IDLE_MS = 30000L
-        // 연결 오류 때는 10초 뒤 재시도
-        private const val RETRY_MS = 10000L
+        private const val RETRY_MS = 15000L
+        // 한 번 깨어 있는 최대 시간. 빠른 모드에서는 매번 연장된다.
+        private const val AWAKE_MS = 20000L
 
         @Volatile var running = false
         @Volatile var lastResult: String = "아직 연결 전"
+        @Volatile var instance: SyncService? = null
 
         fun start(c: Context) {
             val i = Intent(c, SyncService::class.java)
@@ -50,52 +55,84 @@ class SyncService : Service() {
     private lateinit var thread: HandlerThread
     private lateinit var handler: Handler
     private lateinit var player: Player
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null
+    private lateinit var wakeLock: PowerManager.WakeLock
+    private lateinit var alarms: AlarmManager
 
     private val loop = object : Runnable {
         override fun run() {
+            if (!running) return
             val next = try {
                 if (tick()) FAST_MS else IDLE_MS
             } catch (e: Exception) {
                 lastResult = "연결 오류: ${e.message}"
                 RETRY_MS
             }
-            if (running) handler.postDelayed(this, next)
+            if (!running) return
+            if (next == FAST_MS) {
+                // 리모컨을 보고 있는 동안만 깨어 있음
+                wakeLock.acquire(AWAKE_MS)
+                handler.postDelayed(this, FAST_MS)
+            } else {
+                scheduleAlarm(next)
+                if (wakeLock.isHeld) wakeLock.release()
+            }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         player = Player(this)
+        alarms = getSystemService(AlarmManager::class.java)
+        wakeLock = getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "storeremote:sync")
+            .apply { setReferenceCounted(false) }
         startAsForeground()
-
-        val pm = getSystemService(PowerManager::class.java)
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "storeremote:sync").apply { acquire() }
-        @Suppress("DEPRECATION")
-        val wifiMode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        wifiLock = applicationContext.getSystemService(WifiManager::class.java)
-            ?.createWifiLock(wifiMode, "storeremote:wifi")?.apply { acquire() }
 
         thread = HandlerThread("sync").apply { start() }
         handler = Handler(thread.looper)
         running = true
-        handler.post(loop)
+        wakeUp()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
         running = false
+        instance = null
         lastResult = "리모컨 중지됨"
+        alarms.cancel(alarmIntent())
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
-        wakeLock?.let { if (it.isHeld) it.release() }
-        wifiLock?.let { if (it.isHeld) it.release() }
+        if (wakeLock.isHeld) wakeLock.release()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** 알람이나 앱 화면에서 호출: 잠깐 깨어 바로 한 번 확인 */
+    fun wakeUp() {
+        if (!running) return
+        wakeLock.acquire(AWAKE_MS)
+        handler.removeCallbacks(loop)
+        handler.post(loop)
+    }
+
+    private fun alarmIntent(): PendingIntent = PendingIntent.getBroadcast(
+        this, 1, Intent(this, AlarmReceiver::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+
+    private fun scheduleAlarm(delayMs: Long) {
+        val at = SystemClock.elapsedRealtime() + delayMs
+        val pi = alarmIntent()
+        val exactAllowed = Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()
+        if (exactAllowed) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
+        }
+    }
 
     private fun startAsForeground() {
         val nm = getSystemService(NotificationManager::class.java)
